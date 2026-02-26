@@ -1,3 +1,22 @@
+# Build directories
+build/
+_build/
+
+# Pico SDK (fetched at build time)
+pico-sdk/
+
+# Generated PIO headers
+*.pio.h
+
+# CMake artefacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# CodeQL
+_codeql_detected_source_root
+
 # Prerequisites
 *.d
 
