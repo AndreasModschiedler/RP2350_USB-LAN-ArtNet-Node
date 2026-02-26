@@ -1,0 +1,54 @@
+;
+; dmx.pio  – DMX-512 output via PIO for RP2350
+;
+; Transmits a single DMX byte (or break/MAB) with correct UART framing:
+;   - 1 start bit (LOW)
+;   - 8 data bits (LSB first)
+;   - 2 stop bits (HIGH)
+;
+; The CPU handles the BREAK and MAB via gpio_set / timing,
+; then hands each byte to the FIFO.
+;
+; Clock divider must be set so that 1 PIO cycle == 4 µs  (250 kbps → 4 µs per bit).
+; At 150 MHz system clock:  clkdiv = 150_000_000 / 250_000 = 600
+;
+
+.program dmx_uart_tx
+.side_set 1 opt
+
+; Each byte arrives in the OSR.  We output start bit + 8 data bits + 2 stop bits.
+.wrap_target
+    ; Pull next byte from FIFO (block until available)
+    pull    block
+    ; Start bit – drive low for 1 bit period
+    set     x, 7        side 0  [3]    ; x = loop counter (7 iterations), start bit low (4 cycles)
+bitloop:
+    ; Data bits – LSB first
+    out     pins, 1            [3]    ; output 1 bit, hold for 4 cycles
+    jmp     x--, bitloop
+    ; Two stop bits – drive high for 2 bit periods
+    nop                side 1  [3]
+    nop                        [3]
+.wrap
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void dmx_uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin) {
+    pio_gpio_init(pio, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+
+    pio_sm_config c = dmx_uart_tx_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, pin, 1);
+    sm_config_set_sideset_pins(&c, pin);
+    sm_config_set_out_shift(&c, true, false, 32);  /* shift right, no auto-pull */
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    /* Set clock divider for 250 kbps */
+    float div = (float)clock_get_hz(clk_sys) / (4.0f * 250000.0f);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
