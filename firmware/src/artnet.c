@@ -365,6 +365,12 @@ void artnet_send_poll_reply(const ip4_addr_t *dest) {
 }
 
 void artnet_task(void) {
-    /* lwIP polling is driven from main(); nothing extra needed here.
-     * TOD updates are sent on request only. */
+    /* Proactively send TOD data (broadcast) when the RDM device list changes
+     * after a background discovery cycle.  The PC software only needs to be
+     * informed when something actually changed.                              */
+    if (s_mode == MODE_RDM && rdm_tod_changed()) {
+        ip4_addr_t bcast;
+        IP4_ADDR(&bcast, 255, 255, 255, 255);
+        send_tod_data(&bcast);
+    }
 }
